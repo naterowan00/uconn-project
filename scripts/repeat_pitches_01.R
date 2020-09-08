@@ -1,5 +1,5 @@
 
-
+########## IMPORTANT NOTE: MUST FILTER OUT FIRST PITCH OF AT-BAT MANUALLY ###########
 
 
 library(tidyverse); theme_set(theme_minimal())
@@ -119,13 +119,29 @@ greinke <- all_data %>%
 greinke <- greinke %>%
   add_prev_pitch()
 
+### Make pitch name a factor and order it the way I want
+greinke <- greinke %>%
+  mutate(
+    pitch_name = as_factor(pitch_name),
+    pitch_name = factor(
+      pitch_name, 
+      levels = c("4-Seam Fastball", 
+                 "Changeup", 
+                 "Slider", 
+                 "Curveball", 
+                 "2-Seam Fastball", 
+                 "Eephus", 
+                 "Cutter", 
+                 "Split-Finger"))
+  )
+
 ### Astros orange color
 astros_orange <- "#eb6e1f"
 astros_blue <- "#002d62"
 
-### Pitch proportions given he has thrown a fastball
+### Pitch proportions given he has thrown a fastball (non-first pitch)
 greinke %>%
-  filter(prev_pitch_name == "4-Seam Fastball") %>%
+  filter(prev_pitch_name == "4-Seam Fastball", new_ab == FALSE) %>%
   group_by(prev_pitch_name, pitch_name) %>%
   summarise(n = n()) %>%
   mutate(
@@ -133,7 +149,7 @@ greinke %>%
   ) %>%
   filter(n > 5) %>%
   arrange(desc(n)) %>%
-  ggplot(aes(x = fct_reorder(pitch_name, desc(prop)), y = prop)) +
+  ggplot(aes(x = pitch_name, y = prop)) +
     geom_col(fill = astros_orange) +
     geom_text(aes(label = round(prop, 2)), vjust = -.3) +
     labs(
@@ -145,8 +161,9 @@ greinke %>%
     ) +
     scale_y_continuous(limits = c(0, .45))
 
-### Pitch proportions in all situations
+### Pitch proportions in all situations (non-first pitch)
 greinke %>%
+  filter(new_ab == FALSE) %>% 
   group_by(pitch_name) %>%
   summarise(n = n()) %>%
   mutate(
@@ -154,7 +171,7 @@ greinke %>%
   ) %>%
   filter(n > 10) %>%
   arrange(desc(n)) %>%
-  ggplot(aes(x = fct_reorder(pitch_name, desc(prop)), y = prop)) +
+  ggplot(aes(x = pitch_name, y = prop)) +
     geom_col(fill = astros_blue) +
     geom_text(aes(label = round(prop, 2)), vjust = -.3) +
     labs(
@@ -167,7 +184,168 @@ greinke %>%
     scale_y_continuous(limits = c(0, .45))
   
 
+### Pitch proportions given he has thrown a changeup
+greinke %>%
+  filter(prev_pitch_name == "Changeup", new_ab == FALSE) %>%
+  group_by(prev_pitch_name, pitch_name) %>%
+  summarise(n = n()) %>%
+  mutate(
+    prop = n / sum(n)
+  ) %>%
+  filter(n > 1) %>%
+  arrange(desc(n)) %>%
+  ggplot(aes(x = pitch_name, y = prop)) +
+    geom_col(fill = astros_orange) +
+    geom_text(aes(label = round(prop, 2)), vjust = -.3) +
+    labs(
+      title = "Zack Greinke Pitch Distribution After Throwing Changeup, 2019 Season",
+      subtitle = "Data via Baseball Savant",
+      x = "Pitch",
+      y = "Proportion",
+      caption = "Visualization by Nate Rowan, @nate_rowan17"
+    ) +
+    scale_y_continuous(limits = c(0, .45))
+
+### Put the entire Greinke pitch distribution into a table
+greinke_non_first_pitch_counts <- greinke %>%
+  filter(new_ab == FALSE) %>% 
+  group_by(pitch_name) %>%
+  summarise(n = n()) %>%
+  mutate(
+    prop = n / sum(n)
+  ) %>%
+  filter(n > 10) %>%
+  arrange(desc(n))
+
+### Put the pitch distribution post-changeup into a table
+greinke_after_changeup_counts <- greinke %>%
+  filter(prev_pitch_name == "Changeup", new_ab == FALSE) %>%
+  group_by(prev_pitch_name, pitch_name) %>%
+  summarise(n = n()) %>%
+  mutate(
+    prop = n / sum(n)
+  ) %>%
+  filter(n > 1) %>%
+  arrange(desc(n))
+
+### Join the normal distribution with the post-changeup distribution
+greinke_pitch_dist <- greinke_non_first_pitch_counts %>%
+  left_join(greinke_after_changeup_counts, by = "pitch_name") %>%
+  select(-prev_pitch_name) %>%
+  rename(
+    n_total = n.x,
+    prop_total = prop.x,
+    n_after_ch = n.y,
+    prop_after_ch = prop.y
+  )
 
 
 
+### Plot showing the how the distribution is affected by throwing a changeup
+greinke_pitch_dist %>%
+  ggplot(aes(x = pitch_name, y = prop_total)) +
+    geom_col(aes(fill = "All Pitches")) +
+    geom_col(aes(y = prop_after_ch, fill = "After Changeup"), width = .5, alpha = .8) +
+    geom_text(aes(y = prop_after_ch, label = round(prop_after_ch, 2)), vjust = -.3) +
+    labs(
+      title = "How does Zack Greinke's pitch distribution change after throwing a changeup?",
+      subtitle = "2019 season, data via Baseball Savant",
+      x = "Pitch",
+      y = "Proportion",
+      caption = "Visualization by Nate Rowan, @nate_rowan17"
+    ) +
+    scale_y_continuous(limits = c(0, .45)) +
+    scale_fill_manual(
+      name = "Pitch Distribution",
+      values = c("All Pitches" = astros_orange, "After Changeup" = astros_blue)
+    ) +
+    theme(
+      legend.justification = c(1,1),
+      legend.position = c(1,1)
+    )
+
+greinke_after_curveball_counts <- greinke %>%
+  filter(prev_pitch_name == "Curveball", new_ab == FALSE) %>%
+  group_by(prev_pitch_name, pitch_name) %>%
+  summarise(n = n()) %>%
+  mutate(
+    prop = n / sum(n)
+  ) %>%
+  filter(n > 1) %>%
+  arrange(desc(n))
+
+temp_name <- greinke_non_first_pitch_counts %>%
+  left_join(greinke_after_curveball_counts, by = "pitch_name") %>%
+  select(-prev_pitch_name) %>%
+  rename(
+    n_total = n.x,
+    prop_total = prop.x,
+    n_after_cu = n.y,
+    prop_after_cu = prop.y
+  )
+
+temp_name %>%
+  ggplot(aes(x = pitch_name, y = prop_total)) +
+    geom_col(aes(fill = "All Pitches")) +
+    geom_col(aes(y = prop_after_cu, fill = "After Curveball"), width = .5, alpha = .8) +
+    geom_text(aes(y = prop_after_cu, label = round(prop_after_cu, 2)), vjust = -.3) +
+    labs(
+      title = "How does Zack Greinke's pitch distribution change after throwing a curveball?",
+      subtitle = "2019 season, data via Baseball Savant",
+      x = "Pitch",
+      y = "Proportion",
+      caption = "Visualization by Nate Rowan, @nate_rowan17"
+    ) +
+    scale_y_continuous(limits = c(0, .45)) +
+    scale_fill_manual(
+      name = "Pitch Distribution",
+      values = c("All Pitches" = astros_orange, "After Curveball" = astros_blue)
+    ) +
+    theme(
+      legend.justification = c(1,1),
+      legend.position = c(1,1)
+    )
+
+
+greinke_after_slider_counts <- greinke %>%
+  filter(prev_pitch_name == "Slider", new_ab == FALSE) %>%
+  group_by(prev_pitch_name, pitch_name) %>%
+  summarise(n = n()) %>%
+  mutate(
+    prop = n / sum(n)
+  ) %>%
+  filter(n > 1) %>%
+  arrange(desc(n))
+
+temp_name <- greinke_non_first_pitch_counts %>%
+  left_join(greinke_after_slider_counts, by = "pitch_name") %>%
+  select(-prev_pitch_name) %>%
+  rename(
+    n_total = n.x,
+    prop_total = prop.x,
+    n_after_sl = n.y,
+    prop_after_sl = prop.y
+  )
+
+temp_name %>%
+  ggplot(aes(x = pitch_name, y = prop_total)) +
+    geom_col(aes(fill = "All Pitches")) +
+    geom_col(aes(y = prop_after_sl, fill = "After Slider"), width = .5, alpha = .8) +
+    geom_text(aes(y = prop_after_sl, label = round(prop_after_sl, 2)), vjust = -.3) +
+    labs(
+      title = "How does Zack Greinke's pitch distribution change after throwing a slider?",
+      subtitle = "2019 season, data via Baseball Savant",
+      x = "Pitch",
+      y = "Proportion",
+      caption = "Visualization by Nate Rowan, @nate_rowan17"
+    ) +
+    scale_y_continuous(limits = c(0, .45)) +
+    scale_fill_manual(
+      name = "Pitch Distribution",
+      values = c("All Pitches" = astros_orange, "After Slider" = astros_blue)
+    ) +
+    theme(
+      legend.justification = c(1,1),
+      legend.position = c(1,1)
+    )
 
